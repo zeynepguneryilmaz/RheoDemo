@@ -1,3 +1,4 @@
+
 import { RheologyModel, RheologyParams } from '../types.ts';
 import { logSpace, linSpace } from './mathUtils.ts';
 
@@ -41,13 +42,23 @@ export const computeFlowCurves = (model: RheologyModel, p: RheologyParams) => {
         eta = tau / g;
         break;
       case RheologyModel.CASSON:
-        // Casson equation: sqrt(tau) = sqrt(tau0) + sqrt(K * g)
         tau = Math.pow(Math.sqrt(tau0_eff) + Math.sqrt(K_eff * g), 2);
         eta = tau / g;
         break;
       case RheologyModel.BINGHAM:
         tau = tau0_eff + K_eff * g;
         eta = tau / g;
+        break;
+      case RheologyModel.MAXWELL:
+        // Maxwell Viscosity η = G * τ_relaxation
+        eta = (p.G0 * p.tauR) * fT;
+        tau = eta * g;
+        break;
+      case RheologyModel.KELVIN_VOIGT:
+        // Kelvin-Voigt is a solid. No steady state flow.
+        // We simulate a high 'apparent' viscosity for visualization
+        eta = 1e6;
+        tau = eta * g;
         break;
       default:
         tau = tau0_eff + K_eff * Math.pow(g, p.n);
@@ -80,6 +91,7 @@ export const computeOscillatory = (model: RheologyModel, p: RheologyParams) => {
       Gp = G0_eff * Math.pow(w, 0.5);
       Gdp = G0_eff * Math.pow(w, 0.5) * Math.tan(Math.PI * 0.25);
     } else {
+      // General Structural Fluid oscillation
       Gp = G0_eff * Math.pow(w, 0.18);
       Gdp = (G0_eff * 0.3) * Math.pow(w, 0.22);
     }
@@ -93,6 +105,7 @@ export const computeAmplitudeSweep = (p: RheologyParams) => {
   const G0_eff = p.G0 * fT;
 
   return strains.map((g0) => {
+    // Structural breakdown logic based on yield strain
     const structuralPurity = 1 / (1 + Math.pow(g0 / p.gammaY, p.softeningP));
     const Gp = G0_eff * structuralPurity;
     const peak = Math.exp(-Math.pow(Math.log(g0 / p.gammaY), 2) / 1.0);

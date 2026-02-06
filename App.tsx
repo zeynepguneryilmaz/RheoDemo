@@ -1,10 +1,29 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { RheologyModel, RheologyParams, ComparisonSeries } from './types.ts';
 import { DEFAULT_PARAMS, SERIES_COLORS } from './constants.ts';
 import Sidebar from './components/Sidebar.tsx';
 import ChartContainer from './components/ChartContainer.tsx';
 import * as MathModels from './models/rheologyCalculations.ts';
+
+/**
+ * Maps each RheologyModel to the tabs that are physically meaningful for it.
+ * Tabs: 0: Flow, 1: Freq, 2: Amp, 3: 3ITT, 4: Creep, 5: Time, 6: Temp, 7: Step-Shear
+ */
+const MODEL_TAB_MAPPING: Record<RheologyModel, number[]> = {
+  [RheologyModel.NEWTONIAN]: [0, 6],
+  [RheologyModel.POWER_LAW]: [0, 6],
+  [RheologyModel.CROSS]: [0, 6],
+  [RheologyModel.CARREAU]: [0, 6],
+  [RheologyModel.HERSCHEL_BULKLEY]: [0, 1, 2, 3, 6, 7],
+  [RheologyModel.CASSON]: [0, 1, 2, 3, 6, 7],
+  [RheologyModel.BINGHAM]: [0, 1, 2, 3, 6, 7],
+  [RheologyModel.THIXOTROPY]: [0, 3, 6, 7],
+  [RheologyModel.RHEOPEXY]: [0, 3, 6, 7],
+  [RheologyModel.MAXWELL]: [0, 1, 4, 6],
+  [RheologyModel.KELVIN_VOIGT]: [1, 4, 6],
+  [RheologyModel.GELATION]: [1, 5, 6]
+};
 
 const App: React.FC = () => {
   const [model, setModel] = useState<RheologyModel>(RheologyModel.POWER_LAW);
@@ -17,25 +36,19 @@ const App: React.FC = () => {
   };
 
   const handleReset = () => {
-    // Use deep clone to ensure default is never mutated
     setParams(JSON.parse(JSON.stringify(DEFAULT_PARAMS)));
     setModel(RheologyModel.POWER_LAW);
-  };
-
-  const clearAllSeries = () => {
-    setComparisonSeries([]);
   };
 
   const addCurrentToComparison = () => {
     if (comparisonSeries.length >= SERIES_COLORS.length - 1) return;
     const id = Math.random().toString(36).substring(2, 9);
-    // Find the next available color
     const color = SERIES_COLORS[comparisonSeries.length + 1];
     const newSeries: ComparisonSeries = {
       id,
       name: `Trace ${comparisonSeries.length + 1}`,
       model,
-      params: JSON.parse(JSON.stringify(params)), // Deep copy of current state
+      params: JSON.parse(JSON.stringify(params)),
       color
     };
     setComparisonSeries((prev) => [...prev, newSeries]);
@@ -89,7 +102,7 @@ const App: React.FC = () => {
     return null;
   }, [params]);
 
-  const tabs = [
+  const allTabs = [
     { id: 0, label: 'Flow Curves', icon: '〰️' },
     { id: 1, label: 'Freq. Sweep', icon: '📉' },
     { id: 2, label: 'Amp. Sweep', icon: '📈' },
@@ -99,6 +112,17 @@ const App: React.FC = () => {
     { id: 4, label: 'Creep/Relax', icon: '🐌' },
     { id: 5, label: 'Time Sweep', icon: '⏳' }
   ];
+
+  const visibleTabs = useMemo(() => {
+    const allowedIds = MODEL_TAB_MAPPING[model] || [0, 6];
+    return allTabs.filter(tab => allowedIds.includes(tab.id));
+  }, [model]);
+
+  useEffect(() => {
+    if (!visibleTabs.some(t => t.id === activeTab)) {
+      setActiveTab(visibleTabs[0]?.id ?? 0);
+    }
+  }, [visibleTabs, activeTab]);
 
   return (
     <div className="flex flex-col lg:flex-row h-screen w-full bg-[#f8fafc] overflow-hidden font-sans">
@@ -112,29 +136,34 @@ const App: React.FC = () => {
       />
 
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
-        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-5 flex flex-col xl:flex-row items-center justify-between gap-6 shrink-0 z-10 shadow-sm">
-          <div className="flex items-center gap-5">
-            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-blue-400 shadow-xl shadow-slate-100 transform -rotate-2 hover:rotate-0 transition-transform">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+        <header className="bg-white/90 backdrop-blur-xl border-b border-slate-200 px-8 py-5 flex flex-col xl:flex-row items-center justify-between gap-6 shrink-0 z-10 shadow-sm">
+          <div className="flex items-center gap-5 shrink-0">
+            <div className="relative w-14 h-14 bg-slate-950 rounded-[1.25rem] flex items-center justify-center shadow-2xl transform hover:scale-110 transition-all duration-500 overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/30 to-purple-500/20"></div>
+              <svg className="w-9 h-9 relative z-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 12C4 12 7 15 12 15C17 15 20 12 20 12" stroke="#60a5fa" strokeWidth="2.5" strokeLinecap="round"/>
+                <path d="M4 8C4 8 7 11 12 11C17 11 20 8 20 8" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round"/>
+                <path d="M4 16C4 16 7 19 12 19C17 19 20 16 20 16" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
             </div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-none">
-                Rheology <span className="text-blue-600 font-medium italic lowercase tracking-normal">Playground</span>
+              <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+                Rheo<span className="text-blue-600">demo</span>
               </h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1.5 flex items-center gap-2">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                Analysis Engine Live
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-2 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span>
+                Advanced Analysis Suite
               </p>
             </div>
           </div>
 
-          <nav className="flex gap-1.5 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200/50 overflow-x-auto no-scrollbar">
-            {tabs.map((tab) => {
+          <nav className="flex gap-2 p-2 bg-slate-100/60 rounded-[1.25rem] border border-slate-200/50 overflow-x-auto custom-scrollbar-h scroll-smooth max-w-full xl:max-w-2xl 2xl:max-w-4xl">
+            {visibleTabs.map((tab) => {
               const active = activeTab === tab.id;
               return (
                 <button
                   key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2.5 px-5 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all whitespace-nowrap ${active ? 'bg-white text-blue-600 shadow-md ring-1 ring-slate-200 scale-105 z-10' : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'}`}
+                  className={`flex items-center gap-2.5 px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all whitespace-nowrap ${active ? 'bg-white text-blue-600 shadow-[0_4px_12px_rgba(0,0,0,0.05)] ring-1 ring-slate-200 scale-[1.03] z-10' : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'}`}
                 >
                   <span className="text-sm leading-none">{tab.icon}</span>
                   {tab.label}
@@ -144,15 +173,15 @@ const App: React.FC = () => {
           </nav>
         </header>
 
-        <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50 custom-scrollbar">
-          <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="flex-1 p-8 overflow-y-auto bg-slate-50/30 custom-scrollbar">
+          <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-6 duration-1000">
             {activeTab === 0 && (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <ChartContainer 
                   title="Steady-State Flow (Viscosity)" defaultXAxisType="log" defaultYAxisType="log"
                   data={allPlottedSeries.map((s) => {
                     const data = MathModels.computeFlowCurves(s.model, s.params);
-                    return { x: data.map(d => d.gammaDot), y: data.map(d => d.eta), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3, shape: 'spline' }, name: s.name };
+                    return { x: data.map(d => d.gammaDot), y: data.map(d => d.eta), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3.5, shape: 'spline' }, name: s.name };
                   })} 
                   layout={{ xaxis: { title: { text: 'Shear Rate γ̇ [1/s]' } }, yaxis: { title: { text: 'Viscosity η [Pa·s]' } } }} 
                 />
@@ -160,7 +189,7 @@ const App: React.FC = () => {
                   title="Steady-State Flow (Stress)" defaultXAxisType="log" defaultYAxisType="log"
                   data={allPlottedSeries.map((s) => {
                     const data = MathModels.computeFlowCurves(s.model, s.params);
-                    return { x: data.map(d => d.gammaDot), y: data.map(d => d.tau), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3, shape: 'spline' }, name: s.name };
+                    return { x: data.map(d => d.gammaDot), y: data.map(d => d.tau), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3.5, shape: 'spline' }, name: s.name };
                   })} 
                   layout={{ xaxis: { title: { text: 'Shear Rate γ̇ [1/s]' } }, yaxis: { title: { text: 'Shear Stress τ [Pa]' } } }} 
                 />
@@ -173,8 +202,8 @@ const App: React.FC = () => {
                 data={allPlottedSeries.flatMap((s) => {
                   const data = MathModels.computeOscillatory(s.model, s.params);
                   return [
-                    { x: data.map(d => d.freq), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4 }, name: `${s.name} G'` },
-                    { x: data.map(d => d.freq), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 1.5, dash: 'dot' }, name: `${s.name} G''` }
+                    { x: data.map(d => d.freq), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4.5 }, name: `${s.name} G'` },
+                    { x: data.map(d => d.freq), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 2, dash: 'dot' }, name: `${s.name} G''` }
                   ];
                 })} 
                 layout={{ xaxis: { title: { text: 'Frequency f [Hz]' } }, yaxis: { title: { text: 'Moduli G\', G\'\' [Pa]' } } }} 
@@ -183,18 +212,18 @@ const App: React.FC = () => {
 
             {activeTab === 2 && (
               <ChartContainer 
-                title="Amplitude Sweep (Structural Limits)" defaultXAxisType="log" defaultYAxisType="log"
+                title="Amplitude Sweep (LVE Range)" defaultXAxisType="log" defaultYAxisType="log"
                 data={allPlottedSeries.flatMap((s) => {
                   const data = MathModels.computeAmplitudeSweep(s.params);
                   const traces: any[] = [
-                    { x: data.map(d => d.strain), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4 }, name: `${s.name} G'` },
-                    { x: data.map(d => d.strain), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 1.5, dash: 'dot' }, name: `${s.name} G''` }
+                    { x: data.map(d => d.strain), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4.5 }, name: `${s.name} G'` },
+                    { x: data.map(d => d.strain), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 2, dash: 'dot' }, name: `${s.name} G''` }
                   ];
                   if (s.id === 'live' && flowPoint) {
                     traces.push({
                       x: [flowPoint.x], y: [flowPoint.y], type: 'scatter', mode: 'markers',
                       marker: { symbol: 'circle', size: 14, line: { color: '#000', width: 2.5 }, color: 'white' },
-                      name: 'Flow Point', showlegend: false
+                      name: 'Yield Point', showlegend: false
                     });
                   }
                   return traces;
@@ -209,32 +238,32 @@ const App: React.FC = () => {
             {activeTab === 7 && (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <ChartContainer 
-                  title="Step-Shear Structural Recovery" defaultXAxisType="linear" defaultYAxisType="log"
+                  title="Structural Regeneration" defaultXAxisType="linear" defaultYAxisType="log"
                   data={allPlottedSeries.map((s) => {
                     const data = MathModels.computeStepShear(s.model, s.params);
-                    return { x: data.map(d => d.t), y: data.map(d => d.eta), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3, shape: 'hv' }, name: s.name };
+                    return { x: data.map(d => d.t), y: data.map(d => d.eta), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3.5, shape: 'hv' }, name: s.name };
                   })} 
                   layout={{ xaxis: { title: { text: 'Time t [s]' } }, yaxis: { title: { text: 'Viscosity η [Pa·s]' } } }} 
                 />
                 <ChartContainer 
-                  title="Structural Parameter (λ)" defaultXAxisType="linear" defaultYAxisType="linear"
+                  title="Structure Evolution (λ)" defaultXAxisType="linear" defaultYAxisType="linear"
                   data={allPlottedSeries.map((s) => {
                     const data = MathModels.computeStepShear(s.model, s.params);
-                    return { x: data.map(d => d.t), y: data.map(d => d.lambda), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3 }, name: s.name };
+                    return { x: data.map(d => d.t), y: data.map(d => d.lambda), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3.5 }, name: s.name };
                   })} 
-                  layout={{ xaxis: { title: { text: 'Time t [s]' } }, yaxis: { title: { text: 'λ (Structure Level)', range: [0, 1.1] } } }} 
+                  layout={{ xaxis: { title: { text: 'Time t [s]' } }, yaxis: { title: { text: 'λ (Network State)', range: [0, 1.1] } } }} 
                 />
               </div>
             )}
 
             {activeTab === 6 && (
               <ChartContainer 
-                title="Temperature Sensitivity" defaultXAxisType="linear" defaultYAxisType="log"
+                title="Thermo-Rheological Behavior" defaultXAxisType="linear" defaultYAxisType="log"
                 data={allPlottedSeries.flatMap((s) => {
                   const data = MathModels.computeTemperatureSweep(s.params);
                   return [
-                    { x: data.map(d => d.temperature), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4 }, name: `${s.name} G'` },
-                    { x: data.map(d => d.temperature), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 1.5, dash: 'dot' }, name: `${s.name} G''` }
+                    { x: data.map(d => d.temperature), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4.5 }, name: `${s.name} G'` },
+                    { x: data.map(d => d.temperature), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 2, dash: 'dot' }, name: `${s.name} G''` }
                   ];
                 })} 
                 layout={{ xaxis: { title: { text: 'Temperature T [°C]' } }, yaxis: { title: { text: 'Moduli G\', G\'\' [Pa]' } } }} 
@@ -243,10 +272,10 @@ const App: React.FC = () => {
 
             {activeTab === 3 && (
               <ChartContainer 
-                title="3-Interval Thixotropy Test (3ITT)" defaultXAxisType="linear" defaultYAxisType="log"
+                title="Interval Thixotropy Test (3ITT)" defaultXAxisType="linear" defaultYAxisType="log"
                 data={allPlottedSeries.map((s) => {
                   const data = MathModels.computeSelfHealing(s.model, s.params);
-                  return { x: data.map(d => d.t), y: data.map(d => d.eta), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3, shape: 'hv' }, name: s.name };
+                  return { x: data.map(d => d.t), y: data.map(d => d.eta), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3.5, shape: 'hv' }, name: s.name };
                 })} 
                 layout={{ xaxis: { title: { text: 'Time [s]' } }, yaxis: { title: { text: 'Viscosity η [Pa·s]' } } }} 
               />
@@ -254,48 +283,39 @@ const App: React.FC = () => {
 
             {activeTab === 4 && (
               <ChartContainer 
-                title="Creep & Recovery Analysis" defaultXAxisType="linear" defaultYAxisType="linear"
+                title="Creep Compliance & Relaxation" defaultXAxisType="linear" defaultYAxisType="linear"
                 data={allPlottedSeries.map((s) => {
                   const data = MathModels.computeCreepRecovery(s.model, s.params);
-                  return { x: data.map(d => d.t), y: data.map(d => d.strain), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3 }, name: s.name };
+                  return { x: data.map(d => d.t), y: data.map(d => d.strain), type: 'scatter', mode: 'lines', line: { color: s.color, width: 3.5 }, name: s.name };
                 })} 
-                layout={{ xaxis: { title: { text: 'Time t [s]' } }, yaxis: { title: { text: 'Strain ε [-]' } } }} 
+                layout={{ xaxis: { title: { text: 'Time t [s]' } }, yaxis: { title: { text: 'Strain γ [-]' } } }} 
               />
             )}
 
             {activeTab === 5 && (
               <ChartContainer 
-                title="Aging & Gelation (Time Sweep)" defaultXAxisType="linear" defaultYAxisType="log"
+                title="Kinetics of Gelation" defaultXAxisType="linear" defaultYAxisType="log"
                 data={allPlottedSeries.flatMap((s) => {
                   const data = MathModels.computeTimeSweep(s.model, s.params);
                   const traces: any[] = [
-                    { x: data.map(d => d.t), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4 }, name: `${s.name} G'` },
-                    { x: data.map(d => d.t), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 1.5, dash: 'dot' }, name: `${s.name} G''` }
+                    { x: data.map(d => d.t), y: data.map(d => d.Gprime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 4.5 }, name: `${s.name} G'` },
+                    { x: data.map(d => d.t), y: data.map(d => d.GdoublePrime), type: 'scatter', mode: 'lines', line: { color: s.color, width: 2, dash: 'dot' }, name: `${s.name} G''` }
                   ];
                   if (s.id === 'live' && gelPoint) {
                     traces.push({
                       x: [gelPoint.t], y: [gelPoint.g], type: 'scatter', mode: 'markers',
-                      marker: { symbol: 'diamond', size: 14, color: '#2563eb', line: { color: 'white', width: 2 } },
-                      name: 'Gel Point', showlegend: false
+                      marker: { symbol: 'diamond', size: 14, color: '#3b82f6', line: { color: 'white', width: 2.5 } },
+                      name: 'Sol-Gel Point', showlegend: false
                     });
                   }
                   return traces;
                 })} 
                 layout={{ 
                   xaxis: { title: { text: 'Time t [s]' } }, 
-                  yaxis: { title: { text: 'Moduli G\', G\'\' [Pa]' } }
+                  yaxis: { title: { text: 'Dynamic Moduli [Pa]' } }
                 }} 
               />
             )}
-          </div>
-        </div>
-
-        <div className="absolute bottom-6 right-8 pointer-events-none select-none hidden lg:block">
-          <div className="flex flex-col items-end gap-1 opacity-20">
-             <div className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500">Laboratory Data Stream</div>
-             <div className="flex gap-1.5 mt-1">
-                {[...Array(5)].map((_, i) => <div key={i} className="w-1 h-1 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.1}s` }} />)}
-             </div>
           </div>
         </div>
       </main>

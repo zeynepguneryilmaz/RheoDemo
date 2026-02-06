@@ -26,11 +26,16 @@ const PARAM_METADATA: any = {
   lambdaCarreau: { desc: "Relaxation Time (λ): Time constant for the transition to shear thinning.", unit: "s" },
   G0: { desc: "Storage Modulus (G₀): Represents internal stiffness and structural elastic energy storage.", unit: "Pa" },
   tauR: { desc: "Relaxation Time (τR): Characteristic time for stress dissipation in liquids.", unit: "s" },
+  kSpring: { desc: "Elastic Constant: Stiffness of the structural spring component.", unit: "Pa" },
+  etaDashpot: { desc: "Internal Damping: Viscous resistance of the structural dashpot.", unit: "Pa·s" },
   gammaY: { desc: "Yield Strain (γy): Limit of structural elasticity; flow starts beyond this strain.", unit: "%" },
   kb: { desc: "Breakdown Rate: Kinetics of structural destruction under mechanical shear.", unit: "s⁻¹" },
   kr: { desc: "Recovery Rate: Kinetics of structural regeneration (self-healing) at rest.", unit: "s⁻¹" },
   currentTemp: { desc: "Temperature: Simulation of environmental thermal effects on viscosity.", unit: "°C" },
-  tempSensitivity: { desc: "Thermal Sensitivity: Determines how rapidly properties decay with heat.", unit: "K⁻¹" }
+  tempSensitivity: { desc: "Thermal Sensitivity: Determines how rapidly properties decay with heat.", unit: "K⁻¹" },
+  gelRate: { desc: "Curing/Gel Rate: Speed of the chemical or structural network assembly.", unit: "s⁻¹" },
+  gelT0: { desc: "Gel Initiation Time: Onset of measurable structural buildup.", unit: "s" },
+  GprimeFinal: { desc: "Ultimate Stiffness: Final storage modulus after complete structural maturity.", unit: "Pa" }
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -48,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const meta = PARAM_METADATA[paramKey] || { desc: "Parameter value", unit: "" };
 
     return (
-      <div className="mb-8 relative group/row">
+      <div className="mb-8 relative group/row animate-in fade-in slide-in-from-top-2 duration-300">
         <div className="flex justify-between items-center mb-2.5">
           <div className="relative flex items-center gap-2 cursor-help group/label">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover/label:text-slate-900 transition-colors">
@@ -56,18 +61,18 @@ const Sidebar: React.FC<SidebarProps> = ({
             </label>
             <span className="text-[9px] text-slate-300 font-bold lowercase italic">{meta.unit}</span>
             <div className="absolute bottom-full left-0 mb-4 w-72 opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-300 transform translate-y-2 group-hover/label:translate-y-0 z-50">
-              <div className="bg-slate-900 text-white text-[11px] p-5 rounded-3xl shadow-2xl border border-slate-700 leading-relaxed font-medium backdrop-blur-xl">
-                <div className="mb-2.5 text-blue-400 font-black uppercase tracking-widest text-[9px] border-b border-white/10 pb-2">Physics Insight</div>
+              <div className="bg-slate-950 text-white text-[11px] p-6 rounded-[2rem] shadow-2xl border border-white/10 leading-relaxed font-medium backdrop-blur-xl">
+                <div className="mb-3 text-blue-400 font-black uppercase tracking-widest text-[9px] border-b border-white/5 pb-2">Technical Insight</div>
                 {meta.desc}
-                <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
+                <div className="mt-5 pt-3 border-t border-white/5 flex justify-between items-center">
                   <span className="text-slate-500 font-bold uppercase tracking-tighter text-[9px]">Units</span>
-                  <span className="text-white font-black font-mono text-[10px] bg-white/10 px-2 py-0.5 rounded-md">{meta.unit}</span>
+                  <span className="text-white font-black font-mono text-[10px] bg-white/10 px-3 py-1 rounded-lg">{meta.unit}</span>
                 </div>
               </div>
-              <div className="w-3 h-3 bg-slate-900 rotate-45 -mt-1.5 ml-4 border-r border-b border-slate-700"></div>
+              <div className="w-3 h-3 bg-slate-950 rotate-45 -mt-1.5 ml-5 border-r border-b border-white/10"></div>
             </div>
           </div>
-          <span className="font-mono text-[11px] text-blue-600 font-black bg-blue-50/50 px-2.5 py-0.5 rounded-lg border border-blue-100/50">
+          <span className="font-mono text-[11px] text-blue-600 font-black bg-blue-50/70 px-2.5 py-0.5 rounded-lg border border-blue-100/50">
             {typeof value === 'number' ? value.toFixed(value < 0.01 ? 4 : value < 0.1 ? 3 : 2) : value}
           </span>
         </div>
@@ -87,122 +92,169 @@ const Sidebar: React.FC<SidebarProps> = ({
     );
   };
 
+  const isYieldFluid = [RheologyModel.HERSCHEL_BULKLEY, RheologyModel.CASSON, RheologyModel.BINGHAM].includes(model);
+  const isTimeDependent = [RheologyModel.THIXOTROPY, RheologyModel.RHEOPEXY].includes(model);
+  const isViscoelastic = [RheologyModel.MAXWELL, RheologyModel.KELVIN_VOIGT].includes(model);
+  const isGelation = model === RheologyModel.GELATION;
+
   return (
     <>
       <aside className="w-full lg:w-[400px] h-full overflow-y-auto bg-white border-r border-slate-200 flex flex-col custom-scrollbar shrink-0 z-20">
-        <div className="flex border-b border-slate-100 shrink-0 p-2 bg-slate-50/50">
+        <div className="flex border-b border-slate-100 shrink-0 p-2.5 bg-slate-50/50">
           <button onClick={() => setSidebarMode('parameters')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-xl ${sidebarMode === 'parameters' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>Parameters</button>
           <button onClick={() => setSidebarMode('examples')} className={`flex-1 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-xl ${sidebarMode === 'examples' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>Material Lib</button>
         </div>
 
-        <div className="p-10 space-y-12 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="p-10 space-y-14 flex-1 overflow-y-auto custom-scrollbar">
           {sidebarMode === 'examples' ? (
-            <section className="animate-in fade-in slide-in-from-left-4 duration-500">
-              <div className="mb-10">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 italic">Industry Library</h3>
-                <p className="text-sm font-bold text-slate-900 uppercase">Preset Material Data</p>
+            <section className="animate-in fade-in slide-in-from-left-6 duration-500">
+              <div className="mb-12">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 italic">Discovery Engine</h3>
+                <p className="text-base font-black text-slate-900 uppercase tracking-tight">Standard Profiles</p>
               </div>
               <div className="space-y-4">
                 {MATERIAL_PROFILES.map((profile) => {
                   const isActive = model === profile.model && Math.abs(params.K - (profile.params.K || 0)) < 0.001;
                   return (
-                    <button key={profile.name} onClick={() => { setModel(profile.model); setParams(profile.params); }} className={`w-full text-left p-5 rounded-[1.5rem] border transition-all relative group/btn ${isActive ? 'border-slate-900 bg-slate-900 text-white shadow-xl scale-[1.02]' : 'border-slate-100 hover:border-slate-300 bg-slate-50/30'}`}>
-                      <div className="flex justify-between items-center mb-2">
+                    <button key={profile.name} onClick={() => { setModel(profile.model); setParams(profile.params); }} className={`w-full text-left p-6 rounded-[2rem] border transition-all relative group/btn ${isActive ? 'border-slate-950 bg-slate-950 text-white shadow-2xl scale-[1.02]' : 'border-slate-100 hover:border-slate-300 bg-slate-50/40'}`}>
+                      <div className="flex justify-between items-center mb-3">
                         <span className="text-[11px] font-black uppercase tracking-tight">{profile.name}</span>
                         <svg className={`w-4 h-4 transition-transform group-hover/btn:translate-x-1 ${isActive ? 'text-blue-400' : 'text-slate-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
                       </div>
-                      <p className={`text-[10px] leading-relaxed line-clamp-2 font-medium ${isActive ? 'text-slate-400' : 'text-slate-500'}`}>{profile.description}</p>
+                      <p className={`text-[10px] leading-relaxed line-clamp-3 font-medium ${isActive ? 'text-slate-400' : 'text-slate-500'}`}>{profile.description}</p>
                     </button>
                   );
                 })}
               </div>
             </section>
           ) : (
-            <section className="animate-in fade-in slide-in-from-right-4 duration-500">
-              <div className="relative group/select mb-12">
-                <div className="absolute -top-2.5 left-4 px-2 bg-white text-[9px] font-black text-blue-600 uppercase tracking-widest z-10">Fluid Model</div>
-                <select value={model} onChange={(e) => setModel(e.target.value as RheologyModel)} className="w-full p-5 bg-white border-2 border-slate-100 hover:border-blue-500 text-[12px] font-black rounded-2xl outline-none cursor-pointer transition-all appearance-none shadow-sm">
+            <section className="animate-in fade-in slide-in-from-right-6 duration-500">
+              <div className="relative group/select mb-14">
+                <div className="absolute -top-3 left-5 px-2 bg-white text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] z-10">Physics Engine Model</div>
+                <select value={model} onChange={(e) => setModel(e.target.value as RheologyModel)} className="w-full p-6 bg-white border-2 border-slate-100 hover:border-blue-500 text-[12px] font-black rounded-[1.5rem] outline-none cursor-pointer transition-all appearance-none shadow-sm focus:ring-4 focus:ring-blue-50">
                   {Object.values(RheologyModel).map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7" /></svg>
                 </div>
               </div>
               
-              <div className="space-y-12">
+              <div className="space-y-16">
                 <div>
-                  <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-8 flex items-center gap-3">
-                    <span className="w-8 h-[2px] bg-emerald-600 rounded-full"></span> Environmental
+                  <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] mb-10 flex items-center gap-4">
+                    <span className="w-10 h-[2px] bg-emerald-500 rounded-full"></span> Environment
                   </h3>
                   <ControlRow label="Temperature" value={params.currentTemp} min={params.tempMin} max={params.tempMax} step={1} paramKey="currentTemp" />
-                  <ControlRow label="Thermal Sens." value={params.tempSensitivity} min={0} max={0.2} step={0.001} paramKey="tempSensitivity" />
+                  <ControlRow label="Thermal Sensitivity" value={params.tempSensitivity} min={0} max={0.2} step={0.001} paramKey="tempSensitivity" />
                 </div>
 
-                <div>
-                  <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-8 flex items-center gap-3">
-                    <span className="w-8 h-[2px] bg-blue-600 rounded-full"></span> Viscosity Profile
-                  </h3>
-                  {(model === RheologyModel.CROSS || model === RheologyModel.CARREAU) ? (
-                    <>
-                      <ControlRow label="Zero-Shear η₀" value={params.eta0} min={1} max={10000} paramKey="eta0" log={true} />
-                      <ControlRow label="Inf-Shear η∞" value={params.etaInf} min={0.001} max={10} paramKey="etaInf" log={true} />
-                      {model === RheologyModel.CROSS && <ControlRow label="Cross Constant k" value={params.kCross} min={0.01} max={10} paramKey="kCross" log={true} />}
-                      {model === RheologyModel.CARREAU && <ControlRow label="Relaxation λ" value={params.lambdaCarreau} min={0.01} max={10} paramKey="lambdaCarreau" log={true} />}
-                      <ControlRow label="Power Index n" value={params.n} min={0.1} max={1.0} step={0.01} paramKey="n" />
-                    </>
-                  ) : (
-                    <>
-                      <ControlRow label="Consistency K" value={params.K} min={0.001} max={1000} paramKey="K" log={true} />
-                      <ControlRow label="Flow Index n" value={params.n} min={0.05} max={3.0} step={0.01} paramKey="n" />
-                      {(model.includes('Yield') || model.includes('Bingham') || model.includes('Herschel') || model.includes('Casson')) && <ControlRow label="Yield Stress τ₀" value={params.tau0} min={0} max={500} paramKey="tau0" />}
-                    </>
-                  )}
-                </div>
+                {!isViscoelastic && !isGelation && (
+                  <div>
+                    <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] mb-10 flex items-center gap-4">
+                      <span className="w-10 h-[2px] bg-blue-500 rounded-full"></span> Flow Profile
+                    </h3>
+                    {(model === RheologyModel.CROSS || model === RheologyModel.CARREAU) ? (
+                      <>
+                        <ControlRow label="Zero-Shear η₀" value={params.eta0} min={1} max={10000} paramKey="eta0" log={true} />
+                        <ControlRow label="Inf-Shear η∞" value={params.etaInf} min={0.001} max={10} paramKey="etaInf" log={true} />
+                        {model === RheologyModel.CROSS && <ControlRow label="Cross Constant k" value={params.kCross} min={0.01} max={10} paramKey="kCross" log={true} />}
+                        {model === RheologyModel.CARREAU && <ControlRow label="Relaxation λ" value={params.lambdaCarreau} min={0.01} max={10} paramKey="lambdaCarreau" log={true} />}
+                        <ControlRow label="Power Index n" value={params.n} min={0.1} max={1.0} step={0.01} paramKey="n" />
+                      </>
+                    ) : (
+                      <>
+                        <ControlRow label="Consistency K" value={params.K} min={0.001} max={1000} paramKey="K" log={true} />
+                        {model !== RheologyModel.NEWTONIAN && model !== RheologyModel.BINGHAM && <ControlRow label="Flow Index n" value={params.n} min={0.05} max={3.0} step={0.01} paramKey="n" />}
+                        {isYieldFluid && <ControlRow label="Yield Stress τ₀" value={params.tau0} min={0} max={500} paramKey="tau0" />}
+                      </>
+                    )}
+                  </div>
+                )}
 
-                <div>
-                  <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-8 flex items-center gap-3">
-                    <span className="w-8 h-[2px] bg-purple-600 rounded-full"></span> Network Stiffness
-                  </h3>
-                  <ControlRow label="Modulus G₀" value={params.G0} min={1} max={100000} paramKey="G0" log={true} />
-                  <ControlRow label="Critical Strain γY" value={params.gammaY} min={0.01} max={500} paramKey="gammaY" log={true} />
-                </div>
+                {isTimeDependent && (
+                  <div>
+                    <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] mb-10 flex items-center gap-4">
+                      <span className="w-10 h-[2px] bg-rose-500 rounded-full"></span> Time Kinetics
+                    </h3>
+                    <ControlRow label="Breakdown kb" value={params.kb} min={0.01} max={2.0} step={0.01} paramKey="kb" />
+                    <ControlRow label="Recovery kr" value={params.kr} min={0.001} max={0.5} step={0.001} paramKey="kr" />
+                    <ControlRow label="Initial λ₀" value={params.lambda0} min={0} max={1.0} step={0.01} paramKey="lambda0" />
+                  </div>
+                )}
+
+                {isGelation && (
+                  <div>
+                    <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] mb-10 flex items-center gap-4">
+                      <span className="w-10 h-[2px] bg-amber-500 rounded-full"></span> Aging / Curing
+                    </h3>
+                    <ControlRow label="Gelation Rate" value={params.gelRate} min={0.001} max={0.2} step={0.001} paramKey="gelRate" />
+                    <ControlRow label="Induction t0" value={params.gelT0} min={0} max={100} step={1} paramKey="gelT0" />
+                    <ControlRow label="Final Modulus" value={params.GprimeFinal} min={100} max={50000} paramKey="GprimeFinal" log={true} />
+                  </div>
+                )}
+
+                {(isViscoelastic || isGelation || isYieldFluid) && (
+                  <div>
+                    <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] mb-10 flex items-center gap-4">
+                      <span className="w-10 h-[2px] bg-purple-500 rounded-full"></span> Network Stiffness
+                    </h3>
+                    {model === RheologyModel.MAXWELL && (
+                      <>
+                        <ControlRow label="Modulus G₀" value={params.G0} min={1} max={100000} paramKey="G0" log={true} />
+                        <ControlRow label="Relaxation τR" value={params.tauR} min={0.01} max={10} paramKey="tauR" log={true} />
+                      </>
+                    )}
+                    {model === RheologyModel.KELVIN_VOIGT && (
+                      <>
+                        <ControlRow label="Spring Constant" value={params.kSpring} min={1} max={100000} paramKey="kSpring" log={true} />
+                        <ControlRow label="Dashpot Visc." value={params.etaDashpot} min={1} max={10000} paramKey="etaDashpot" log={true} />
+                      </>
+                    )}
+                    {(isYieldFluid || isGelation) && (
+                      <>
+                        {model !== RheologyModel.MAXWELL && <ControlRow label="Storage Modulus G₀" value={params.G0} min={1} max={100000} paramKey="G0" log={true} />}
+                        <ControlRow label="Yield Strain γY" value={params.gammaY} min={0.01} max={500} paramKey="gammaY" log={true} />
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
           )}
 
-          <section className="pt-10 border-t border-slate-100">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Trace Registry</h3>
+          <section className="pt-12 border-t border-slate-100">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Snapshot Registry</h3>
             <button 
               onClick={onAddSeries} 
               disabled={comparisonSeries.length >= 7}
-              className="w-full py-4.5 bg-white border-2 border-slate-900 text-slate-900 text-[11px] font-black rounded-2xl hover:bg-slate-900 hover:text-white transition-all uppercase tracking-widest active:scale-95 flex items-center justify-center gap-3 group/store disabled:opacity-30 disabled:pointer-events-none mb-6"
+              className="w-full py-5 bg-white border-2 border-slate-950 text-slate-950 text-[11px] font-black rounded-2xl hover:bg-slate-950 hover:text-white transition-all uppercase tracking-widest active:scale-95 flex items-center justify-center gap-3 group/store disabled:opacity-30 disabled:pointer-events-none mb-8 shadow-sm"
             >
               <svg className="w-4 h-4 group-hover/store:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
-              Save Current Trace ({comparisonSeries.length}/7)
+              Capture Snapshot ({comparisonSeries.length}/7)
             </button>
             
-            <div className="space-y-2">
+            <div className="space-y-3">
               {comparisonSeries.map((series) => (
-                <div key={series.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: series.color }}></div>
-                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">{series.name}</span>
+                <div key={series.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 hover:border-slate-300 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="w-3.5 h-3.5 rounded-full shadow-inner" style={{ backgroundColor: series.color }}></div>
+                    <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">{series.name}</span>
                   </div>
-                  <button onClick={() => onRemoveSeries(series.id)} className="p-1.5 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-lg transition-colors">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  <button onClick={() => onRemoveSeries(series.id)} className="p-2 hover:bg-rose-50 text-slate-300 hover:text-rose-500 rounded-xl transition-all">
+                    <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                   </button>
                 </div>
               ))}
               {comparisonSeries.length === 0 && (
-                <p className="text-center text-[9px] font-bold text-slate-300 uppercase italic py-4">No snapshots saved</p>
+                <p className="text-center text-[9px] font-bold text-slate-300 uppercase tracking-widest italic py-8">Registry Empty</p>
               )}
             </div>
           </section>
         </div>
 
-        <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
-          <button onClick={onReset} className="flex-1 py-4.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 text-[11px] font-black rounded-2xl transition-all active:scale-95 uppercase tracking-widest">Reset Knobs</button>
-          <button onClick={() => setIsGuideOpen(true)} className="flex-[2] py-4.5 bg-blue-600 text-white text-[11px] font-black rounded-2xl hover:bg-blue-700 uppercase tracking-[0.2em] transition-all shadow-xl shadow-blue-200 active:scale-95">Theory Hub</button>
+        <div className="p-10 bg-slate-50 border-t border-slate-100 flex gap-4 shrink-0">
+          <button onClick={onReset} className="flex-1 py-5 bg-white border border-slate-200 text-slate-500 hover:text-slate-950 text-[11px] font-black rounded-[1.25rem] transition-all active:scale-95 uppercase tracking-widest shadow-sm">Reset</button>
+          <button onClick={() => setIsGuideOpen(true)} className="flex-[2] py-5 bg-blue-600 text-white text-[11px] font-black rounded-[1.25rem] hover:bg-blue-700 uppercase tracking-[0.2em] transition-all shadow-xl shadow-blue-200 active:scale-95">Theory Hub</button>
         </div>
       </aside>
       <TheoryModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
