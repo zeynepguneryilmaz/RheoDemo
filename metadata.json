@@ -1,0 +1,5 @@
+{
+  "name": "RheoDemo",
+  "description": "An interactive scientific simulator for complex fluids, including Non-Newtonian flows, thixotropy, viscoelasticity, and gelation processes with interactive Plotly visualizations.",
+  "requestFramePermissions": []
+}
